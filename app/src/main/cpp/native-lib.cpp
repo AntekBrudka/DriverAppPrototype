@@ -94,16 +94,7 @@ void MatToBitmap(JNIEnv * env, Mat src, jobject bitmap, jboolean needPremultiply
     }
 }
 
-
 extern "C" JNIEXPORT jstring JNICALL
-Java_com_example_driverappprototype_MainActivity_stringFromJNI(
-        JNIEnv* env,
-        jobject /* this */) {
-    std::string hello = "Hello from C++";
-    return env->NewStringUTF(hello.c_str());
-}
-
-extern "C" JNIEXPORT void JNICALL
 Java_com_example_driverappprototype_MainActivity_detect(
         JNIEnv* env,
         jobject,
@@ -112,5 +103,13 @@ Java_com_example_driverappprototype_MainActivity_detect(
     Mat src;
     bitmapToMat(env, bitmapIn, src, false);
     detect(src);
+
+    int lala = 1;
+    int lolo = 0;
+    std::string lalastr = std::to_string(lala);
+    std::string lolostr = std::to_string(lolo);
+    std::string feedback = lalastr + lolostr;
+
     MatToBitmap(env, src, bitmapOut, false);
+    return env->NewStringUTF(feedback.c_str());
 }
