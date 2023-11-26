@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">driverAppPrototype</string>
+    <string name="source">source</string>
+    <string name="feedback">feedback</string>
+    <string name="video">Video</string>
+    <string name="live">Live</string>
+    <string name="visual">Visual</string>
+    <string name="text">Text</string>
+    <string name="filename">filename</string>
+</resources>
