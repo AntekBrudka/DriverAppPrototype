@@ -1,4 +1,4 @@
-# DriverAppPrototype
+# driverAppPrototype
 
 ## Part of a larger project
 At the moment the project is called **Unnamed Driver's App**.
