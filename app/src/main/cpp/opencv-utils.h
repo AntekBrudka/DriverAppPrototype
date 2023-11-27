@@ -4,4 +4,5 @@
 
 using namespace cv;
 
-void detect(Mat src);
+Mat detect(Mat src);
+std::vector<std::string> load_class_list();

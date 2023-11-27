@@ -102,7 +102,9 @@ Java_com_example_driverappprototype_MainActivity_detect(
         jobject bitmapOut) {
     Mat src;
     bitmapToMat(env, bitmapIn, src, false);
-    detect(src);
+
+    Mat m = detect(src);
+    //std::string matAsString (m.begin<unsigned char>(), m.end<unsigned char>()); // This won't work for a array > 2d
 
     int lala = 1;
     int lolo = 0;
