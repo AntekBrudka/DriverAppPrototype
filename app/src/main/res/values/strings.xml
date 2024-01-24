@@ -6,5 +6,7 @@
     <string name="live">Live</string>
     <string name="visual">Visual</string>
     <string name="text">Text</string>
+    <string name="stop">Stop</string>
     <string name="filename">filename</string>
+    <string name="Perf">FPS : \nTime per frame :\nDetections :</string>
 </resources>
