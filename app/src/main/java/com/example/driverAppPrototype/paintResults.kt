@@ -4,7 +4,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 
-internal class PaintResults {
+internal class paintResults {
     private val mPaintRectangle: Paint = Paint()
     private val mPaintText: Paint
 
@@ -26,7 +26,7 @@ internal class PaintResults {
             canvas.drawText(
                 String.format(
                     "%s %.2f",
-                    PostProcessor.mClasses[result.classIndex],
+                    postProcessor.mClasses[result.classIndex],
                     result.score
                 ), result.rect.left.toFloat(), result.rect.top.toFloat(), mPaintText
             )

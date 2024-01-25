@@ -15,7 +15,6 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.graphics.drawable.toBitmap
 import com.example.driverAppPrototype.databinding.ActivityMainBinding
 
@@ -28,6 +27,7 @@ import kotlinx.coroutines.launch
 import org.pytorch.IValue
 import org.pytorch.LiteModuleLoader
 import org.pytorch.Module
+import org.pytorch.LitePyTorchAndroid.setNumThreads
 
 import org.pytorch.torchvision.TensorImageUtils
 
@@ -46,10 +46,9 @@ class MainActivity : AppCompatActivity() {
     private var classes: MutableList<String> = ArrayList()
     private var feedbackType : Boolean = false // 0 meaning visual, 1 meaning text
     private var sourceType : Boolean = false // 0 meaning video, 1 meaning camera
-    private var modelChoice : Int = 0 // 0 for signs, 1 for lanes
     private var isVideoPlaying : Boolean = false
     private var modelList : List<List<String>> = listOf(listOf("classesSigns.txt", "modelSigns.torchscript.ptl"), listOf("classesLanes.txt", "modelLanes.torchscript.ptl"))
-
+    private var modelChoice : Int = 0 // 0 for signs, 1 for lanes
 
     @Throws(IOException::class)
     fun assetFilePath(context: Context, assetName: String): String? {
@@ -92,7 +91,7 @@ class MainActivity : AppCompatActivity() {
         val models = arrayOf("Signs", "Lanes", "Same as before")
         val builder = AlertDialog.Builder(this, R.style.AlertDialogCustom)
         builder.setTitle("What do you want to detect?")
-        builder.setItems(models) { _, which ->
+        builder.setItems(models) { dialog, which ->
             modelChoice = which
             loadModelAndClasses()
         }
@@ -120,16 +119,16 @@ class MainActivity : AppCompatActivity() {
         {
             classes.add(iterator.next())
         }
-        PostProcessor.assignClasses(classes.toTypedArray())
+        postProcessor.assignClasses(classes.toTypedArray())
         br.close()
     }
 
     private fun getPredictions(image: Bitmap): ArrayList<Result>? {
-        val resizedBitmap = Bitmap.createScaledBitmap(image, PostProcessor.mInputWidth, PostProcessor.mInputHeight, true)
+        val resizedBitmap = Bitmap.createScaledBitmap(image, postProcessor.mInputWidth, postProcessor.mInputHeight, true)
         val inputTensor = TensorImageUtils.bitmapToFloat32Tensor(
             resizedBitmap,
-            PostProcessor.NO_MEAN_RGB,
-            PostProcessor.NO_STD_RGB)
+            postProcessor.NO_MEAN_RGB,
+            postProcessor.NO_STD_RGB)
         val outputTuple = mModule?.forward(IValue.from(inputTensor))?.toTuple()
 
         val outputTensor = outputTuple?.get(0)?.toTensor()
@@ -137,7 +136,7 @@ class MainActivity : AppCompatActivity() {
         val imgSizeX = image.width.toFloat()
         val imgSizeY = image.height.toFloat()
         val results = outputs?.let {
-            PostProcessor.outputsToNMSPredictions(
+            postProcessor.outputsToNMSPredictions(
                 it,
                 imgSizeX,
                 imgSizeY
@@ -159,7 +158,7 @@ class MainActivity : AppCompatActivity() {
                     var detNum = 0
                     val startTime = System.currentTimeMillis()
                     val image = try {
-                        retriever.getFrameAtIndex(num * 30)
+                        retriever.getFrameAtIndex(num)
                     } catch (e: IllegalArgumentException) {
                         null
                     }
@@ -179,7 +178,7 @@ class MainActivity : AppCompatActivity() {
                             if (results != null) {
                                 for (result in results) {
                                     val stringToAppend =
-                                        PostProcessor.mClasses[result.classIndex] + " " + result.score * 100 + "%\n"
+                                        postProcessor.mClasses[result.classIndex] + " " + result.score * 100 + "%\n"
                                     resultMessage.append(stringToAppend)
                                 }
                             }
@@ -189,7 +188,7 @@ class MainActivity : AppCompatActivity() {
                         {
                             val drawOnImg = Canvas(imgAfterConv)
                             if (results != null) {
-                                PaintResults().draw(drawOnImg, results)
+                                paintResults().draw(drawOnImg, results)
                             }
                             async{ binding.imgView.setImageBitmap(imgAfterConv) }.await()
                         }
@@ -210,41 +209,41 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun setupButtons(){
-        binding.btnStop.setCompoundDrawablesWithIntrinsicBounds(null, AppCompatResources.getDrawable(this, R.drawable.playvec), null, null)
-        binding.btnFeedback.setCompoundDrawablesWithIntrinsicBounds(null, AppCompatResources.getDrawable(this, R.drawable.visualvec), null, null)
-        binding.btnSource.setCompoundDrawablesWithIntrinsicBounds(null, AppCompatResources.getDrawable(this, R.drawable.videovec), null, null)
+    fun setupButtons(){
+        binding.btnStop.setCompoundDrawablesWithIntrinsicBounds(null, resources.getDrawable(R.drawable.playvec), null, null)
+        binding.btnFeedback.setCompoundDrawablesWithIntrinsicBounds(null, resources.getDrawable(R.drawable.visualvec), null, null)
+        binding.btnSource.setCompoundDrawablesWithIntrinsicBounds(null, resources.getDrawable(R.drawable.videovec), null, null)
     }
 
-    fun btnSourceClick(view: View) {
+    fun btnSource_click(view: View) {
         if (!sourceType) {
             sourceType = true
-            binding.btnSource.setCompoundDrawablesWithIntrinsicBounds(null, AppCompatResources.getDrawable(this, R.drawable.cameravec), null, null)
+            binding.btnSource.setCompoundDrawablesWithIntrinsicBounds(null, resources.getDrawable(R.drawable.cameravec), null, null)
         } else {
             sourceType = false
-            binding.btnSource.setCompoundDrawablesWithIntrinsicBounds(null, AppCompatResources.getDrawable(this, R.drawable.videovec), null, null)
+            binding.btnSource.setCompoundDrawablesWithIntrinsicBounds(null, resources.getDrawable(R.drawable.videovec), null, null)
         }
     }
 
-    fun btnFeedbackClick(view: View) {
+    fun btnFeedback_click(view: View) {
         if (!feedbackType) {
             feedbackType = true
             binding.imgView.setImageBitmap(resources.getDrawable(R.drawable.trafficjam).toBitmap())
-            binding.btnFeedback.setCompoundDrawablesWithIntrinsicBounds(null, AppCompatResources.getDrawable(this, R.drawable.textvec), null, null)
+            binding.btnFeedback.setCompoundDrawablesWithIntrinsicBounds(null, resources.getDrawable(R.drawable.textvec), null, null)
         } else {
             feedbackType = false
-            binding.btnFeedback.setCompoundDrawablesWithIntrinsicBounds(null, AppCompatResources.getDrawable(this, R.drawable.visualvec), null, null)
+            binding.btnFeedback.setCompoundDrawablesWithIntrinsicBounds(null, resources.getDrawable(R.drawable.visualvec), null, null)
         }
     }
 
-    fun btnStopClick(view: View) {
+    fun btnStop_click(view: View) {
         if(!isVideoPlaying){
             isVideoPlaying = true
-            binding.btnStop.setCompoundDrawablesWithIntrinsicBounds(null, AppCompatResources.getDrawable(this, R.drawable.cancelvec), null, null)
+            binding.btnStop.setCompoundDrawablesWithIntrinsicBounds(null, resources.getDrawable(R.drawable.cancelvec), null, null)
             photoPickerLauncher.launch(PickVisualMediaRequest(mediaType = ActivityResultContracts.PickVisualMedia.VideoOnly))
         } else {
             isVideoPlaying = false
-            binding.btnStop.setCompoundDrawablesWithIntrinsicBounds(null, AppCompatResources.getDrawable(this, R.drawable.playvec), null, null)
+            binding.btnStop.setCompoundDrawablesWithIntrinsicBounds(null, resources.getDrawable(R.drawable.playvec), null, null)
         }
     }
 }

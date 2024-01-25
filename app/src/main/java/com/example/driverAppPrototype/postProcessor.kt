@@ -4,7 +4,7 @@ import android.graphics.Rect
 import java.util.Arrays
 
 class Result(var classIndex: Int, var score: Float, var rect: Rect)
-object PostProcessor {
+object postProcessor {
     // for yolov5 model, no need to apply MEAN and STD
     var NO_MEAN_RGB = floatArrayOf(0.0f, 0.0f, 0.0f)
     var NO_STD_RGB = floatArrayOf(1.0f, 1.0f, 1.0f)
@@ -30,6 +30,8 @@ object PostProcessor {
      */
     private fun nonMaxSuppression(
         boxes: ArrayList<Result>,
+        limit: Int,
+        threshold: Float
     ): ArrayList<Result> {
 
         // Do an argsort on the confidence scores, from high to low.
@@ -50,11 +52,11 @@ object PostProcessor {
             if (active[i]) {
                 val boxA = boxes[i]
                 selected.add(boxA)
-                if (selected.size >= mNmsLimit) break
+                if (selected.size >= limit) break
                 for (j in i + 1 until boxes.size) {
                     if (active[j]) {
                         val boxB = boxes[j]
-                        if (iou(boxA.rect, boxB.rect) > mThreshold) {
+                        if (IOU(boxA.rect, boxB.rect) > threshold) {
                             active[j] = false
                             numActive -= 1
                             if (numActive <= 0) {
@@ -73,7 +75,7 @@ object PostProcessor {
     /**
      * Computes intersection-over-union overlap between two bounding boxes.
      */
-    private fun iou(a: Rect, b: Rect): Float {
+    fun IOU(a: Rect, b: Rect): Float {
         val areaA = ((a.right - a.left) * (a.bottom - a.top)).toFloat()
         if (areaA <= 0.0) return 0.0f
         val areaB = ((b.right - b.left) * (b.bottom - b.top)).toFloat()
@@ -116,7 +118,7 @@ object PostProcessor {
                 results.add(result)
             }
         }
-        return nonMaxSuppression(results)
+        return nonMaxSuppression(results, mNmsLimit, mThreshold)
     }
 
     fun assignClasses(classes: Array<String>) {
