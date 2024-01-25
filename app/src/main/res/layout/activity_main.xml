@@ -13,7 +13,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:backgroundTint="#00353238"
-        android:onClick="btnStop_click"
+        android:onClick="btnStopClick"
         android:paddingTop="25dp"
         android:paddingBottom="0dp"
         app:cornerRadius="8dp"
@@ -28,7 +28,7 @@
         android:layout_height="wrap_content"
         android:layout_marginEnd="8dp"
         android:backgroundTint="#00353238"
-        android:onClick="btnFeedback_click"
+        android:onClick="btnFeedbackClick"
         android:paddingTop="25dp"
         android:paddingBottom="0dp"
         app:cornerRadius="8dp"
@@ -41,7 +41,7 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="8dp"
         android:backgroundTint="#00353238"
-        android:onClick="btnSource_click"
+        android:onClick="btnSourceClick"
         android:paddingTop="25dp"
         android:paddingBottom="0dp"
         app:cornerRadius="8dp"
@@ -91,7 +91,7 @@
             android:layout_height="match_parent"
             android:background="@color/jet"
             android:padding="16dp"
-            android:textColor="#FFFFFF"
+            android:textColor="@color/silver"
             android:textSize="20sp" />
     </androidx.cardview.widget.CardView>
 
