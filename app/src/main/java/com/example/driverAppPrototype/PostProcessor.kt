@@ -4,8 +4,7 @@ import android.graphics.Rect
 import java.util.Arrays
 
 class Result(var classIndex: Int, var score: Float, var rect: Rect)
-object postProcessor {
-    // for yolov5 model, no need to apply MEAN and STD
+object PostProcessor {
     var NO_MEAN_RGB = floatArrayOf(0.0f, 0.0f, 0.0f)
     var NO_STD_RGB = floatArrayOf(1.0f, 1.0f, 1.0f)
 
@@ -13,10 +12,9 @@ object postProcessor {
     var mInputWidth = 640
     var mInputHeight = 640
 
-    // model output is of size 25200*(num_of_class+5)
     private const val mOutputRow = 25200 // as decided by the YOLOv5 model for input image of size 640x640
     private var mOutputColumn = 6 // left, top, right, bottom, score and 80 class probability
-    private const val mThreshold = 0.30f // score above which a detection is generated
+    private const val mThreshold = 0.30f // score above which a detection is generated, change that to arg in setThreshold function later
     private const val mNmsLimit = 15
     lateinit var mClasses: Array<String>
     // The two methods nonMaxSuppression and IOU below are ported from https://github.com/hollance/YOLO-CoreML-MPSNNGraph/blob/master/Common/Helpers.swift
@@ -29,34 +27,26 @@ object postProcessor {
      * - threshold: used to decide whether boxes overlap too much
      */
     private fun nonMaxSuppression(
-        boxes: ArrayList<Result>,
-        limit: Int,
-        threshold: Float
+        boxes: ArrayList<Result>
     ): ArrayList<Result> {
 
-        // Do an argsort on the confidence scores, from high to low.
         boxes.sortWith(java.util.Comparator { o1, o2 -> o1.score.compareTo(o2.score) })
         val selected = ArrayList<Result>()
         val active = BooleanArray(boxes.size)
         Arrays.fill(active, true)
         var numActive = active.size
 
-        // The algorithm is simple: Start with the box that has the highest score.
-        // Remove any remaining boxes that overlap it more than the given threshold
-        // amount. If there are any boxes left (i.e. these did not overlap with any
-        // previous boxes), then repeat this procedure, until no more boxes remain
-        // or the limit has been reached.
         var done = false
         var i = 0
         while (i < boxes.size && !done) {
             if (active[i]) {
                 val boxA = boxes[i]
                 selected.add(boxA)
-                if (selected.size >= limit) break
+                if (selected.size >= mNmsLimit) break
                 for (j in i + 1 until boxes.size) {
                     if (active[j]) {
                         val boxB = boxes[j]
-                        if (IOU(boxA.rect, boxB.rect) > threshold) {
+                        if (iou(boxA.rect, boxB.rect) > mThreshold) {
                             active[j] = false
                             numActive -= 1
                             if (numActive <= 0) {
@@ -75,7 +65,7 @@ object postProcessor {
     /**
      * Computes intersection-over-union overlap between two bounding boxes.
      */
-    fun IOU(a: Rect, b: Rect): Float {
+    fun iou(a: Rect, b: Rect): Float {
         val areaA = ((a.right - a.left) * (a.bottom - a.top)).toFloat()
         if (areaA <= 0.0) return 0.0f
         val areaB = ((b.right - b.left) * (b.bottom - b.top)).toFloat()
@@ -118,7 +108,7 @@ object postProcessor {
                 results.add(result)
             }
         }
-        return nonMaxSuppression(results, mNmsLimit, mThreshold)
+        return nonMaxSuppression(results)
     }
 
     fun assignClasses(classes: Array<String>) {
