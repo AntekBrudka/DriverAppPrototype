@@ -47,6 +47,8 @@ dependencies {
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("org.pytorch:pytorch_android_lite:2.1.0")
     implementation("org.pytorch:pytorch_android_torchvision_lite:2.1.0")
+    implementation("androidx.camera:camera-camera2:1.4.0-alpha04")
+    implementation("androidx.camera:camera-lifecycle:1.4.0-alpha04")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")

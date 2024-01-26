@@ -4,12 +4,11 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.media.MediaMetadataRetriever
-import android.net.Uri
 import android.os.Bundle
+import android.os.ParcelFileDescriptor
 import android.view.View
 import android.view.Window
 import android.view.WindowManager
-
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -17,20 +16,17 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.graphics.drawable.toBitmap
-import com.example.driverAppPrototype.databinding.ActivityMainBinding
 
+import com.example.driverAppPrototype.databinding.ActivityMainBinding
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
-
 import org.pytorch.IValue
 import org.pytorch.LiteModuleLoader
 import org.pytorch.Module
-
 import org.pytorch.torchvision.TensorImageUtils
-
 import java.io.BufferedReader
 import java.io.File
 import java.io.FileOutputStream
@@ -42,6 +38,8 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var photoPickerLauncher: ActivityResultLauncher<PickVisualMediaRequest>
+    private var fileDescriptor : ParcelFileDescriptor? = null
+    private val retriever = MediaMetadataRetriever()
     private var mModule: Module? = null
     private var classes: MutableList<String> = ArrayList()
     private var feedbackType : Boolean = false // 0 meaning visual, 1 meaning text
@@ -49,7 +47,8 @@ class MainActivity : AppCompatActivity() {
     private var isVideoPlaying : Boolean = false
     private var modelList : List<List<String>> = listOf(listOf("classesSigns.txt", "modelSigns.torchscript.ptl"), listOf("classesLanes.txt", "modelLanes.torchscript.ptl"))
     private var modelChoice : Int = 0 // 0 for signs, 1 for lanes
-
+    private var videoFrame : Int = 0
+    private val skipFrames : Int = 1
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -65,7 +64,9 @@ class MainActivity : AppCompatActivity() {
         photoPickerLauncher =
             registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
                 if (uri != null) {
-                    displayVideo(uri)
+                    fileDescriptor = contentResolver.openFileDescriptor(uri, "r")
+                    retriever.setDataSource(fileDescriptor?.fileDescriptor)
+                    streamFeedback()
                 }
             }
 
@@ -77,8 +78,8 @@ class MainActivity : AppCompatActivity() {
             loadModelAndClasses()
         }
         builder.show()
-        setupButtons()
 
+        setupButtons()
         //setNumThreads(6)
     }
 
@@ -100,7 +101,6 @@ class MainActivity : AppCompatActivity() {
             return file.absolutePath
         }
     }
-
     private fun loadModelAndClasses(){
         if(modelChoice == 2){
             val prefs = getSharedPreferences("driverAppPrefs", MODE_PRIVATE)
@@ -122,7 +122,6 @@ class MainActivity : AppCompatActivity() {
         PostProcessor.assignClasses(classes.toTypedArray())
         br.close()
     }
-
     private fun getPredictions(image: Bitmap): ArrayList<Result>? {
         val resizedBitmap = Bitmap.createScaledBitmap(image, PostProcessor.mInputWidth, PostProcessor.mInputHeight, true)
         val inputTensor = TensorImageUtils.bitmapToFloat32Tensor(
@@ -144,77 +143,89 @@ class MainActivity : AppCompatActivity() {
         }
         return results
     }
+    private fun yieldFrameFromVideo(): Bitmap? {
+        val image = try {
+            retriever.getFrameAtIndex(videoFrame)
+        } catch (e: IllegalArgumentException) {
+            null
+        }
+        videoFrame += 1*skipFrames
+        return image
+    }
     @OptIn(DelicateCoroutinesApi::class)
-    fun displayVideo(uri: Uri) { // To be improved, for now, it only takes one scenario into account (video from photoPicker as a source)
+    fun streamFeedback() {
         binding.btnSource.isEnabled = false
         binding.btnFeedback.isEnabled = false
 
-        contentResolver.openFileDescriptor(uri, "r").use { fileDescriptor ->
-            val retriever = MediaMetadataRetriever()
-            retriever.setDataSource(fileDescriptor?.fileDescriptor)
-            var num = 0
-            GlobalScope.launch(Dispatchers.Main) {
-                while (true) {
-                    var detNum = 0
-                    val startTime = System.currentTimeMillis()
-                    val image = try {
-                        retriever.getFrameAtIndex(num)
-                    } catch (e: IllegalArgumentException) {
-                        null
-                    }
-                    if(!isVideoPlaying)
-                    {
-                        break
-                    }
-                    if (image != null) {
-                        val imgAfterConv = image.copy(image.config, true)
+        GlobalScope.launch(Dispatchers.Main) {
+            while (true) {
 
-                        val results = getPredictions(imgAfterConv)
-                        if (results != null) {
-                            detNum = results.size
-                        }
-                        if(feedbackType){
-                            val resultMessage = StringBuilder()
-                            if (results != null) {
-                                for (result in results) {
-                                    val stringToAppend =
-                                        PostProcessor.mClasses[result.classIndex] + " " + result.score * 100 + "%\n"
-                                    resultMessage.append(stringToAppend)
-                                }
-                            }
-                            async{ binding.textView.text = resultMessage }.await()
-                        }
-                        else
-                        {
-                            val drawOnImg = Canvas(imgAfterConv)
-                            if (results != null) {
-                                PaintResults().draw(drawOnImg, results)
-                            }
-                            async{ binding.imgView.setImageBitmap(imgAfterConv) }.await()
-                        }
-                    } else {
-                        break
-                    }
-                    num++
-
-                    val perfTime = (System.currentTimeMillis() - startTime)/1000.0
-                    val perfMessage = "FPS : " + "%.2f".format(1/perfTime) + "\nTime per frame : " + "%.2f".format(perfTime) + "s\nDetections : " + detNum
-                    binding.perfView.text = perfMessage
+                if(!isVideoPlaying)
+                {
+                    break
                 }
-                isVideoPlaying = false
-                binding.btnStop.setCompoundDrawablesWithIntrinsicBounds(null, resources.getDrawable(R.drawable.playvec), null, null)
-                binding.btnSource.isEnabled = true
-                binding.btnFeedback.isEnabled = true
+                var detNum = 0
+                val startTime = System.currentTimeMillis()
+                var image: Bitmap?
+
+                if(sourceType){
+                    image = null // change to yieldFrameFromCamera
+                } else {
+                    image = yieldFrameFromVideo()
+                }
+
+                if (image != null) {
+                    val imgAfterConv = image.copy(image.config, true)
+
+                    val results = getPredictions(imgAfterConv)
+                    if (results != null) {
+                        detNum = results.size
+                    }
+                    if(feedbackType){
+                        val resultMessage = StringBuilder()
+                        if (results != null) {
+                            for (result in results) {
+                                val stringToAppend =
+                                    PostProcessor.mClasses[result.classIndex] + " " + result.score * 100 + "%\n"
+                                resultMessage.append(stringToAppend)
+                            }
+                        }
+                        async{ binding.textView.text = resultMessage }.await()
+                    }
+                    else
+                    {
+                        val drawOnImg = Canvas(imgAfterConv)
+                        if (results != null) {
+                            PaintResults().draw(drawOnImg, results)
+                        }
+                        async{ binding.imgView.setImageBitmap(imgAfterConv) }.await()
+                    }
+                } else {
+                    break
+                }
+
+                val perfTime = (System.currentTimeMillis() - startTime)/1000.0
+                val perfMessage = "FPS : " + "%.2f".format(1/perfTime) + "\nTime per frame : " + "%.2f".format(perfTime) + "s\nDetections : " + detNum
+                binding.perfView.text = perfMessage
             }
+
+            if(sourceType){
+                null
+            } else {
+                fileDescriptor?.close()
+            }
+
+            isVideoPlaying = false
+            binding.btnStop.setCompoundDrawablesWithIntrinsicBounds(null, resources.getDrawable(R.drawable.playvec), null, null)
+            binding.btnSource.isEnabled = true
+            binding.btnFeedback.isEnabled = true
         }
     }
-
     private fun setupButtons(){
         binding.btnStop.setCompoundDrawablesWithIntrinsicBounds(null, AppCompatResources.getDrawable(this, R.drawable.playvec), null, null)
         binding.btnFeedback.setCompoundDrawablesWithIntrinsicBounds(null, AppCompatResources.getDrawable(this, R.drawable.visualvec), null, null)
         binding.btnSource.setCompoundDrawablesWithIntrinsicBounds(null, AppCompatResources.getDrawable(this, R.drawable.videovec), null, null)
     }
-
     fun btnSourceClick(view: View) {
         if (!sourceType) {
             sourceType = true
@@ -224,7 +235,6 @@ class MainActivity : AppCompatActivity() {
             binding.btnSource.setCompoundDrawablesWithIntrinsicBounds(null, AppCompatResources.getDrawable(this, R.drawable.videovec), null, null)
         }
     }
-
     fun btnFeedbackClick(view: View) {
         if (!feedbackType) {
             feedbackType = true
@@ -235,15 +245,28 @@ class MainActivity : AppCompatActivity() {
             binding.btnFeedback.setCompoundDrawablesWithIntrinsicBounds(null, AppCompatResources.getDrawable(this, R.drawable.visualvec), null, null)
         }
     }
-
     fun btnStopClick(view: View) {
-        if(!isVideoPlaying){
-            isVideoPlaying = true
-            binding.btnStop.setCompoundDrawablesWithIntrinsicBounds(null, AppCompatResources.getDrawable(this, R.drawable.cancelvec), null, null)
-            photoPickerLauncher.launch(PickVisualMediaRequest(mediaType = ActivityResultContracts.PickVisualMedia.VideoOnly))
+        if(sourceType){
+            null
         } else {
-            isVideoPlaying = false
-            binding.btnStop.setCompoundDrawablesWithIntrinsicBounds(null,AppCompatResources.getDrawable(this, R.drawable.playvec), null, null)
+            if (!isVideoPlaying) {
+                isVideoPlaying = true
+                binding.btnStop.setCompoundDrawablesWithIntrinsicBounds(
+                    null,
+                    AppCompatResources.getDrawable(this, R.drawable.cancelvec),
+                    null,
+                    null
+                )
+                photoPickerLauncher.launch(PickVisualMediaRequest(mediaType = ActivityResultContracts.PickVisualMedia.VideoOnly))
+            } else {
+                isVideoPlaying = false
+                binding.btnStop.setCompoundDrawablesWithIntrinsicBounds(
+                    null,
+                    AppCompatResources.getDrawable(this, R.drawable.playvec),
+                    null,
+                    null
+                )
+            }
         }
     }
 }
