@@ -45,10 +45,10 @@ class MainActivity : AppCompatActivity() {
     private var feedbackType : Boolean = false // 0 meaning visual, 1 meaning text
     private var sourceType : Boolean = false // 0 meaning video, 1 meaning camera
     private var isVideoPlaying : Boolean = false
-    private var modelList : List<List<String>> = listOf(listOf("classesSigns.txt", "modelSigns.torchscript.ptl"), listOf("classesLanes.txt", "modelLanes.torchscript.ptl"))
+    private var modelList : List<List<String>> = listOf(listOf("classesSigns.txt", "modelSigns.torchscript.ptl"), listOf("classesLanes.txt", "modelLanes.torchscript.ptl"), listOf("classesPCA.txt", "modelPCA.torchscript.ptl"))
     private var modelChoice : Int = 0 // 0 for signs, 1 for lanes
     private var videoFrame : Int = 0
-    private val skipFrames : Int = 1
+    private val skipFrames : Int = 10
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -70,7 +70,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-        val models = arrayOf("Signs", "Lanes", "Same as before")
+        val models = arrayOf("Signs", "Lanes", "People, cars and animals", "Same as before")
         val builder = AlertDialog.Builder(this, R.style.AlertDialogCustom)
         builder.setTitle("What do you want to detect?")
         builder.setItems(models) { dialog, which ->
@@ -82,7 +82,6 @@ class MainActivity : AppCompatActivity() {
         setupButtons()
         //setNumThreads(6)
     }
-
     @Throws(IOException::class)
     fun assetFilePath(context: Context, assetName: String): String? {
         val file = File(context.filesDir, assetName)
@@ -102,7 +101,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
     private fun loadModelAndClasses(){
-        if(modelChoice == 2){
+        if(modelChoice == 3){
             val prefs = getSharedPreferences("driverAppPrefs", MODE_PRIVATE)
             modelChoice = prefs.getInt("modelChoiceKey", 0) // 0 is the default value
         }

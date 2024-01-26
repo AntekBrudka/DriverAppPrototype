@@ -14,7 +14,7 @@ object PostProcessor {
 
     private const val mOutputRow = 25200 // as decided by the YOLOv5 model for input image of size 640x640
     private var mOutputColumn = 6 // left, top, right, bottom, score and 80 class probability
-    private const val mThreshold = 0.30f // score above which a detection is generated, change that to arg in setThreshold function later
+    private const val mThreshold = 0.60f // score above which a detection is generated, change that to arg in setThreshold function later
     private const val mNmsLimit = 15
     lateinit var mClasses: Array<String>
     // The two methods nonMaxSuppression and IOU below are ported from https://github.com/hollance/YOLO-CoreML-MPSNNGraph/blob/master/Common/Helpers.swift
