@@ -91,7 +91,7 @@
             android:layout_height="match_parent"
             android:background="@color/jet"
             android:padding="16dp"
-            android:textColor="#FFFFFF"
+            android:textColor="@color/silver"
             android:textSize="20sp" />
     </androidx.cardview.widget.CardView>
 

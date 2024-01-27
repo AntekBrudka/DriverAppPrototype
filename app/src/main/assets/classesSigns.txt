@@ -1,0 +1,20 @@
+ogr 20
+ogr 30
+ogr 40
+ogr 50
+ogr 60
+ogr 70
+ogr 80
+ogr 90
+ogr 100
+ogr 110
+ogr 120
+ogr 140
+Inne ograniczenia
+Teren zabudowany
+Teren niezabudowany
+Autostrada
+Droga szybkiego ruchu
+Zmiana pierwszenstwa(Pierwszenstwo,ustap pierwszensta,koniec pierwszenstwa)
+koniec autostrada
+koniec droga szybkiego ruchu

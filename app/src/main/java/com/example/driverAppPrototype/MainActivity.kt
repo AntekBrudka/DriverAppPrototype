@@ -48,7 +48,7 @@ class MainActivity : AppCompatActivity() {
     private var modelList : List<List<String>> = listOf(listOf("classesSigns.txt", "modelSigns.torchscript.ptl"), listOf("classesLanes.txt", "modelLanes.torchscript.ptl"), listOf("classesPCA.txt", "modelPCA.torchscript.ptl"))
     private var modelChoice : Int = 0 // 0 for signs, 1 for lanes
     private var videoFrame : Int = 0
-    private val skipFrames : Int = 10
+    private val skipFrames : Int = 1
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -101,7 +101,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
     private fun loadModelAndClasses(){
-        if(modelChoice == 3){
+        if(modelChoice == modelList.size){
             val prefs = getSharedPreferences("driverAppPrefs", MODE_PRIVATE)
             modelChoice = prefs.getInt("modelChoiceKey", 0) // 0 is the default value
         }
@@ -185,7 +185,7 @@ class MainActivity : AppCompatActivity() {
                         if (results != null) {
                             for (result in results) {
                                 val stringToAppend =
-                                    PostProcessor.mClasses[result.classIndex] + " " + result.score * 100 + "%\n"
+                                    PostProcessor.mClasses[result.classIndex] + " " + result.score + "\n"
                                 resultMessage.append(stringToAppend)
                             }
                         }
