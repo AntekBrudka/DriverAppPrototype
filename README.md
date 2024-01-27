@@ -27,4 +27,4 @@ The right button enables you to choose the feedback mode, either visual (in the 
 Using camera as a source will be added to the app, till then, the source button on the left is not doing anything.
 
 ### Disclaimer
-Some functions are based on the [Android demo app](github.com/pytorch/android-demo-app).
+Some functions are based on the [Android demo app]([github.com/pytorch/android-demo-app](https://github.com/pytorch/android-demo-app)https://github.com/pytorch/android-demo-app).
