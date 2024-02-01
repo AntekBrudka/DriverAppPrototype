@@ -4,10 +4,11 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 
-internal class PaintResults {
+object PaintResults {
     private val mPaintRectangle: Paint = Paint()
     private val mPaintText: Paint
-
+    private const val TEXT_WIDTH = 260
+    private const val TEXT_HEIGHT = 50
     init {
         mPaintRectangle.color = Color.RED
         mPaintText = Paint()
@@ -25,15 +26,10 @@ internal class PaintResults {
             canvas.drawText(
                 String.format(
                     "%s %.2f",
-                    PostProcessor.mClasses[result.classIndex],
+                    PrePostProcessor.mClasses[result.classIndex],
                     result.score
                 ), result.rect.left.toFloat(), result.rect.top.toFloat(), mPaintText
             )
         }
-    }
-
-    companion object {
-        private const val TEXT_WIDTH = 260
-        private const val TEXT_HEIGHT = 50
     }
 }

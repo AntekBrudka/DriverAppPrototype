@@ -4,7 +4,7 @@ import android.graphics.Rect
 import java.util.Arrays
 
 class Result(var classIndex: Int, var score: Float, var rect: Rect)
-object PostProcessor {
+object PrePostProcessor {
     var NO_MEAN_RGB = floatArrayOf(0.0f, 0.0f, 0.0f)
     var NO_STD_RGB = floatArrayOf(1.0f, 1.0f, 1.0f)
 

@@ -1,6 +1,5 @@
 package com.example.driverAppPrototype
 
-import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.media.MediaMetadataRetriever
@@ -24,24 +23,16 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import org.pytorch.IValue
-import org.pytorch.LiteModuleLoader
 import org.pytorch.Module
 import org.pytorch.torchvision.TensorImageUtils
-import java.io.BufferedReader
-import java.io.File
-import java.io.FileOutputStream
-import java.io.IOException
-import java.io.InputStreamReader
 
 
-class MainActivity : AppCompatActivity() {
-
+class MainActivity : AppCompatActivity() { // user choices and changing the main activity components
     private lateinit var binding: ActivityMainBinding
     private lateinit var photoPickerLauncher: ActivityResultLauncher<PickVisualMediaRequest>
     private var fileDescriptor : ParcelFileDescriptor? = null
     private val retriever = MediaMetadataRetriever()
-    private var mModule: Module? = null
-    private var classes: MutableList<String> = ArrayList()
+    private var module: Module? = null
     private var feedbackType : Boolean = false // 0 meaning visual, 1 meaning text
     private var sourceType : Boolean = false // 0 meaning video, 1 meaning camera
     private var isVideoPlaying : Boolean = false
@@ -75,66 +66,39 @@ class MainActivity : AppCompatActivity() {
         builder.setTitle("What do you want to detect?")
         builder.setItems(models) { dialog, which ->
             modelChoice = which
-            loadModelAndClasses()
+
+            if(modelChoice == modelList.size){
+                val prefs = getSharedPreferences("driverAppPrefs", MODE_PRIVATE)
+                modelChoice = prefs.getInt("modelChoiceKey", 0) // 0 is the default value
+            }
+            val prefs = getSharedPreferences("driverAppPrefs", MODE_PRIVATE)
+            val editor = prefs.edit()
+            editor.putInt("modelChoiceKey", modelChoice)
+            editor.apply()
+
+            PrePostProcessor.mClasses =
+                FileLoader.loadClasses(applicationContext, modelList[modelChoice][0]).toTypedArray()
+            module = FileLoader.loadModel(applicationContext, modelList[modelChoice][1])
         }
         builder.show()
 
         setupButtons()
         //setNumThreads(6)
     }
-    @Throws(IOException::class)
-    fun assetFilePath(context: Context, assetName: String): String? {
-        val file = File(context.filesDir, assetName)
-        if (file.exists() && file.length() > 0) {
-            return file.absolutePath
-        }
-        context.assets.open(assetName).use { `is` ->
-            FileOutputStream(file).use { os ->
-                val buffer = ByteArray(4 * 1024)
-                var read: Int
-                while (`is`.read(buffer).also { read = it } != -1) {
-                    os.write(buffer, 0, read)
-                }
-                os.flush()
-            }
-            return file.absolutePath
-        }
-    }
-    private fun loadModelAndClasses(){
-        if(modelChoice == modelList.size){
-            val prefs = getSharedPreferences("driverAppPrefs", MODE_PRIVATE)
-            modelChoice = prefs.getInt("modelChoiceKey", 0) // 0 is the default value
-        }
-
-        val prefs = getSharedPreferences("driverAppPrefs", MODE_PRIVATE)
-        val editor = prefs.edit()
-        editor.putInt("modelChoiceKey", modelChoice)
-        editor.apply()
-
-        mModule = LiteModuleLoader.load(this.assetFilePath(applicationContext, modelList[modelChoice][1]))
-        val br = BufferedReader(InputStreamReader(assets.open(modelList[modelChoice][0])))
-        val iterator = br.lineSequence().iterator()
-        while(iterator.hasNext())
-        {
-            classes.add(iterator.next())
-        }
-        PostProcessor.assignClasses(classes.toTypedArray())
-        br.close()
-    }
     private fun getPredictions(image: Bitmap): ArrayList<Result>? {
-        val resizedBitmap = Bitmap.createScaledBitmap(image, PostProcessor.mInputWidth, PostProcessor.mInputHeight, true)
+        val resizedBitmap = Bitmap.createScaledBitmap(image, PrePostProcessor.mInputWidth, PrePostProcessor.mInputHeight, true)
         val inputTensor = TensorImageUtils.bitmapToFloat32Tensor(
             resizedBitmap,
-            PostProcessor.NO_MEAN_RGB,
-            PostProcessor.NO_STD_RGB)
-        val outputTuple = mModule?.forward(IValue.from(inputTensor))?.toTuple()
+            PrePostProcessor.NO_MEAN_RGB,
+            PrePostProcessor.NO_STD_RGB)
+        val outputTuple = module?.forward(IValue.from(inputTensor))?.toTuple()
 
         val outputTensor = outputTuple?.get(0)?.toTensor()
         val outputs = outputTensor?.dataAsFloatArray
         val imgSizeX = image.width.toFloat()
         val imgSizeY = image.height.toFloat()
         val results = outputs?.let {
-            PostProcessor.outputsToNMSPredictions(
+            PrePostProcessor.outputsToNMSPredictions(
                 it,
                 imgSizeX,
                 imgSizeY
@@ -185,7 +149,7 @@ class MainActivity : AppCompatActivity() {
                         if (results != null) {
                             for (result in results) {
                                 val stringToAppend =
-                                    PostProcessor.mClasses[result.classIndex] + " " + result.score + "\n"
+                                    PrePostProcessor.mClasses[result.classIndex] + " " + result.score + "\n"
                                 resultMessage.append(stringToAppend)
                             }
                         }
@@ -195,7 +159,7 @@ class MainActivity : AppCompatActivity() {
                     {
                         val drawOnImg = Canvas(imgAfterConv)
                         if (results != null) {
-                            PaintResults().draw(drawOnImg, results)
+                            PaintResults.draw(drawOnImg, results)
                         }
                         async{ binding.imgView.setImageBitmap(imgAfterConv) }.await()
                     }
