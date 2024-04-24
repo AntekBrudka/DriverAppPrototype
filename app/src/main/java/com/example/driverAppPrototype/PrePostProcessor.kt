@@ -5,8 +5,8 @@ import java.util.Arrays
 
 class Result(var classIndex: Int, var score: Float, var rect: Rect)
 object PrePostProcessor {
-    var NO_MEAN_RGB = floatArrayOf(0.0f, 0.0f, 0.0f)
-    var NO_STD_RGB = floatArrayOf(1.0f, 1.0f, 1.0f)
+    var noMeanRGB = floatArrayOf(0.0f, 0.0f, 0.0f)
+    var noStdRGB = floatArrayOf(1.0f, 1.0f, 1.0f)
 
     // model input image size
     var mInputWidth = 640
@@ -65,7 +65,7 @@ object PrePostProcessor {
     /**
      * Computes intersection-over-union overlap between two bounding boxes.
      */
-    fun iou(a: Rect, b: Rect): Float {
+    private fun iou(a: Rect, b: Rect): Float {
         val areaA = ((a.right - a.left) * (a.bottom - a.top)).toFloat()
         if (areaA <= 0.0) return 0.0f
         val areaB = ((b.right - b.left) * (b.bottom - b.top)).toFloat()

@@ -7,8 +7,6 @@ import android.graphics.Paint
 object PaintResults {
     private val mPaintRectangle: Paint = Paint()
     private val mPaintText: Paint
-    private const val TEXT_WIDTH = 260
-    private const val TEXT_HEIGHT = 50
     init {
         mPaintRectangle.color = Color.RED
         mPaintText = Paint()

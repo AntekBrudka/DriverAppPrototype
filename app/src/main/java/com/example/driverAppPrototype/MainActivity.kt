@@ -1,20 +1,31 @@
 package com.example.driverAppPrototype
 
+import android.Manifest
+import android.content.ContentValues.TAG
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Matrix
 import android.media.MediaMetadataRetriever
 import android.os.Bundle
 import android.os.ParcelFileDescriptor
+import android.util.Log
 import android.view.View
 import android.view.Window
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
+import androidx.camera.core.ImageCapture
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
+import androidx.lifecycle.LifecycleOwner
 
 import com.example.driverAppPrototype.databinding.ActivityMainBinding
 import kotlinx.coroutines.DelicateCoroutinesApi
@@ -22,16 +33,20 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import org.pytorch.IValue
 import org.pytorch.Module
 import org.pytorch.torchvision.TensorImageUtils
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import kotlin.coroutines.resume
 
 
 class MainActivity : AppCompatActivity() { // user choices and changing the main activity components
     private lateinit var binding: ActivityMainBinding
     private lateinit var photoPickerLauncher: ActivityResultLauncher<PickVisualMediaRequest>
     private var fileDescriptor : ParcelFileDescriptor? = null
-    private val retriever = MediaMetadataRetriever()
+    private val mediaRetriever = MediaMetadataRetriever()
     private var module: Module? = null
     private var feedbackType : Boolean = false // 0 meaning visual, 1 meaning text
     private var sourceType : Boolean = false // 0 meaning video, 1 meaning camera
@@ -40,9 +55,17 @@ class MainActivity : AppCompatActivity() { // user choices and changing the main
     private var modelChoice : Int = 0 // 0 for signs, 1 for lanes
     private var videoFrame : Int = 0
     private val skipFrames : Int = 1
+    private val cameraHelper = CameraHelper(this)
+    private lateinit var cameraProvider: ProcessCameraProvider
+    private lateinit var imageCapture: ImageCapture
+    private lateinit var cameraExecutor: ExecutorService
+    companion object {
+        private const val CAMERA_PERMISSION_REQUEST_CODE = 100 // You can choose any integer value
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Set up the main view
         window.setFlags(
             WindowManager.LayoutParams.FLAG_FULLSCREEN,
             WindowManager.LayoutParams.FLAG_FULLSCREEN
@@ -52,26 +75,42 @@ class MainActivity : AppCompatActivity() { // user choices and changing the main
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // Setup video picker
         photoPickerLauncher =
             registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
                 if (uri != null) {
                     fileDescriptor = contentResolver.openFileDescriptor(uri, "r")
-                    retriever.setDataSource(fileDescriptor?.fileDescriptor)
-                    streamFeedback()
+                    mediaRetriever.setDataSource(fileDescriptor?.fileDescriptor)
+                    streamFeedback(this)
                 }
             }
 
+        // Check camera permissions
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+            != PackageManager.PERMISSION_GRANTED) {
+            // Request CAMERA permission if not granted
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.CAMERA),
+                CAMERA_PERMISSION_REQUEST_CODE
+            )
+        } else {
+            cameraExecutor = Executors.newSingleThreadExecutor()
+            startCameraSetup()
+            cameraHelper.startCamera(this)
+        }
+
+        // Choose model
         val models = arrayOf("Signs", "Lanes", "People, cars and animals", "Same as before")
         val builder = AlertDialog.Builder(this, R.style.AlertDialogCustom)
         builder.setTitle("What do you want to detect?")
         builder.setItems(models) { dialog, which ->
             modelChoice = which
 
+            val prefs = getSharedPreferences("driverAppPrefs", MODE_PRIVATE)
             if(modelChoice == modelList.size){
-                val prefs = getSharedPreferences("driverAppPrefs", MODE_PRIVATE)
                 modelChoice = prefs.getInt("modelChoiceKey", 0) // 0 is the default value
             }
-            val prefs = getSharedPreferences("driverAppPrefs", MODE_PRIVATE)
             val editor = prefs.edit()
             editor.putInt("modelChoiceKey", modelChoice)
             editor.apply()
@@ -85,12 +124,55 @@ class MainActivity : AppCompatActivity() { // user choices and changing the main
         setupButtons()
         //setNumThreads(6)
     }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        when (requestCode) {
+            CAMERA_PERMISSION_REQUEST_CODE -> {
+                // Check if the CAMERA permission has been granted
+                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    cameraExecutor = Executors.newSingleThreadExecutor()
+                    startCameraSetup()
+                    cameraHelper.startCamera(this)
+
+                } else {
+                    // Permission denied, handle accordingly (e.g., show a message or disable camera functionality)
+                    Toast.makeText(this, "Camera permission denied", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun startCameraSetup() {
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
+        cameraProviderFuture.addListener({
+            cameraProvider = cameraProviderFuture.get()
+
+            // Set up image capture
+            imageCapture = ImageCapture.Builder()
+                .build()
+
+            // Bind use cases to camera
+            cameraHelper.bindCameraUseCases(cameraProvider, imageCapture)
+
+        }, ContextCompat.getMainExecutor(this))
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        cameraExecutor.shutdown()
+    }
+
     private fun getPredictions(image: Bitmap): ArrayList<Result>? {
         val resizedBitmap = Bitmap.createScaledBitmap(image, PrePostProcessor.mInputWidth, PrePostProcessor.mInputHeight, true)
         val inputTensor = TensorImageUtils.bitmapToFloat32Tensor(
             resizedBitmap,
-            PrePostProcessor.NO_MEAN_RGB,
-            PrePostProcessor.NO_STD_RGB)
+            PrePostProcessor.noMeanRGB,
+            PrePostProcessor.noStdRGB)
         val outputTuple = module?.forward(IValue.from(inputTensor))?.toTuple()
 
         val outputTensor = outputTuple?.get(0)?.toTensor()
@@ -108,15 +190,23 @@ class MainActivity : AppCompatActivity() { // user choices and changing the main
     }
     private fun yieldFrameFromVideo(): Bitmap? {
         val image = try {
-            retriever.getFrameAtIndex(videoFrame)
+            mediaRetriever.getFrameAtIndex(videoFrame)
         } catch (e: IllegalArgumentException) {
             null
         }
         videoFrame += 1*skipFrames
         return image
     }
+    private suspend fun captureImage(cameraHelper: CameraHelper): Bitmap? {
+        return suspendCancellableCoroutine { continuation ->
+            cameraHelper.takePhotoAsBitmap { bitmap ->
+                continuation.resume(bitmap)
+            }
+        }
+    }
+
     @OptIn(DelicateCoroutinesApi::class)
-    fun streamFeedback() {
+    fun streamFeedback(lifecycleOwner: LifecycleOwner) {
         binding.btnSource.isEnabled = false
         binding.btnFeedback.isEnabled = false
 
@@ -127,12 +217,17 @@ class MainActivity : AppCompatActivity() { // user choices and changing the main
                 {
                     break
                 }
+
                 var detNum = 0
                 val startTime = System.currentTimeMillis()
-                var image: Bitmap?
+                var image: Bitmap? = null
 
-                if(sourceType){
-                    image = null // change to yieldFrameFromCamera
+                if (sourceType) {
+                    image = captureImage(cameraHelper)
+                    val matrix = Matrix().apply { postRotate(90F) }
+                    if (image != null) {
+                        image = Bitmap.createBitmap(image, 0, 0, image.width, image.height, matrix, true)
+                    }
                 } else {
                     image = yieldFrameFromVideo()
                 }
@@ -172,9 +267,7 @@ class MainActivity : AppCompatActivity() { // user choices and changing the main
                 binding.perfView.text = perfMessage
             }
 
-            if(sourceType){
-                null
-            } else {
+            if(!sourceType){
                 fileDescriptor?.close()
             }
 
@@ -184,6 +277,7 @@ class MainActivity : AppCompatActivity() { // user choices and changing the main
             binding.btnFeedback.isEnabled = true
         }
     }
+
     private fun setupButtons(){
         binding.btnStop.setCompoundDrawablesWithIntrinsicBounds(null, AppCompatResources.getDrawable(this, R.drawable.playvec), null, null)
         binding.btnFeedback.setCompoundDrawablesWithIntrinsicBounds(null, AppCompatResources.getDrawable(this, R.drawable.visualvec), null, null)
@@ -209,27 +303,27 @@ class MainActivity : AppCompatActivity() { // user choices and changing the main
         }
     }
     fun btnStopClick(view: View) {
-        if(sourceType){
-            null
-        } else {
-            if (!isVideoPlaying) {
-                isVideoPlaying = true
-                binding.btnStop.setCompoundDrawablesWithIntrinsicBounds(
-                    null,
-                    AppCompatResources.getDrawable(this, R.drawable.cancelvec),
-                    null,
-                    null
-                )
-                photoPickerLauncher.launch(PickVisualMediaRequest(mediaType = ActivityResultContracts.PickVisualMedia.VideoOnly))
+        if (!isVideoPlaying) {
+            isVideoPlaying = true
+            binding.btnStop.setCompoundDrawablesWithIntrinsicBounds(
+                null,
+                AppCompatResources.getDrawable(this, R.drawable.cancelvec),
+                null,
+                null
+            )
+            if(sourceType){
+                streamFeedback(this)
             } else {
-                isVideoPlaying = false
-                binding.btnStop.setCompoundDrawablesWithIntrinsicBounds(
-                    null,
-                    AppCompatResources.getDrawable(this, R.drawable.playvec),
-                    null,
-                    null
-                )
+                photoPickerLauncher.launch(PickVisualMediaRequest(mediaType = ActivityResultContracts.PickVisualMedia.VideoOnly))
             }
+        } else {
+            isVideoPlaying = false
+            binding.btnStop.setCompoundDrawablesWithIntrinsicBounds(
+                null,
+                AppCompatResources.getDrawable(this, R.drawable.playvec),
+                null,
+                null
+            )
         }
     }
 }
