@@ -28,12 +28,14 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.LifecycleOwner
 
 import com.example.driverAppPrototype.databinding.ActivityMainBinding
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import org.pytorch.IValue
 import org.pytorch.Module
 import org.pytorch.torchvision.TensorImageUtils
@@ -210,7 +212,7 @@ class MainActivity : AppCompatActivity() { // user choices and changing the main
         binding.btnSource.isEnabled = false
         binding.btnFeedback.isEnabled = false
 
-        GlobalScope.launch(Dispatchers.Main) {
+        CoroutineScope(Dispatchers.Main).launch {
             while (true) {
 
                 if(!isVideoPlaying)
@@ -223,7 +225,7 @@ class MainActivity : AppCompatActivity() { // user choices and changing the main
                 var image: Bitmap? = null
 
                 if (sourceType) {
-                    image = captureImage(cameraHelper)
+                    image = withContext(Dispatchers.IO) {return@withContext captureImage(cameraHelper) }
                     val matrix = Matrix().apply { postRotate(90F) }
                     if (image != null) {
                         image = Bitmap.createBitmap(image, 0, 0, image.width, image.height, matrix, true)
@@ -235,7 +237,7 @@ class MainActivity : AppCompatActivity() { // user choices and changing the main
                 if (image != null) {
                     val imgAfterConv = image.copy(image.config, true)
 
-                    val results = getPredictions(imgAfterConv)
+                    val results = withContext(Dispatchers.IO) {return@withContext getPredictions(imgAfterConv) }
                     if (results != null) {
                         detNum = results.size
                     }
